@@ -3,10 +3,12 @@ export const sealViewTemplate = `
     <div class="panel">
       <h3>封批快照</h3>
       <table>
-        <thead><tr><th>封批号</th><th>采样</th><th>代</th><th>快照</th><th>时间</th></tr></thead>
+        <thead><tr><th>封批号</th><th>采样</th><th>样本状态</th><th>代</th><th>快照</th><th>时间</th></tr></thead>
         <tbody>
-          <tr v-for="s in seals" :key="s.id">
-            <td>{{ s.seal_ref }}</td><td>{{ s.sample_code }}</td><td>{{ s.sample_generation }}</td>
+          <tr v-for="s in seals" :key="s.id" :class="{'row-void': s.sample_status==='作废'}">
+            <td>{{ s.seal_ref }}</td><td>{{ s.sample_code }}</td>
+            <td :class="s.sample_status==='作废' ? 'void' : 'pass'">{{ s.sample_status }}</td>
+            <td>{{ s.sample_generation }}</td>
             <td>{{ s.snapshot }}</td><td>{{ s.sealed_at }}</td>
           </tr>
         </tbody>

@@ -73,6 +73,15 @@ class LineageIn(BaseModel):
     detail: str
 
 
+class ForceDeleteIn(BaseModel):
+    # 乙路径影子草稿开关（多种别名，便于不同调用方）；缺省走甲同事务级联。
+    mode: str | None = None
+    path: str | None = None
+    shadow: bool | None = None
+    cascade: bool | None = None
+    confirm: bool | None = None
+
+
 class StubJobIn(BaseModel):
     mode: str = "dry_run"
     detail: str = ""

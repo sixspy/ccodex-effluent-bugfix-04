@@ -34,6 +34,9 @@ createApp({
     const seals = ref([]);
     const permits = ref([]);
     const lineageEdges = ref([]);
+    const lineageShadows = ref([]);
+    const lineageOrphanCount = ref(0);
+    const reconOrphans = ref([]);
     const labJobs = ref([]);
     const sludgeJobs = ref([]);
     const plantDetail = ref(null);
@@ -90,6 +93,7 @@ createApp({
     }
     function sampleClass(s) {
       if (!s) return "muted";
+      if (s.includes("作废")) return "void";
       if (s.includes("挂起")) return "fail";
       if (s.includes("准排") || s.includes("裁定") || s.includes("封批")) return "pass";
       return "muted";
@@ -135,7 +139,10 @@ createApp({
       releases.value = (await api.releases()).items;
       seals.value = (await api.seals()).items;
       permits.value = (await api.permits()).items;
-      lineageEdges.value = (await api.lineage()).items;
+      const lineagePayload = await api.lineage();
+      lineageEdges.value = lineagePayload.items;
+      lineageShadows.value = lineagePayload.shadows || [];
+      lineageOrphanCount.value = lineagePayload.orphan_count || 0;
       labJobs.value = (await api.labJobs()).items;
       sludgeJobs.value = (await api.sludgeJobs()).items;
       if (!releaseForm.value.sample_id && releasableSamples.value.length) {
@@ -180,8 +187,37 @@ createApp({
         detail: lineageForm.value.detail,
       }));
     }
+    async function forceDeleteEdge(id, mode) {
+      const tip = mode === "shadow"
+        ? "先落乙路径影子断链草稿？正式子指标暂不作废，待确认后原子作废。"
+        : "强制删除该父边，并在同一事务级联作废全部子指标，确认？";
+      if (!window.confirm(tip)) return;
+      await flash(async () => {
+        const r = await api.forceDeleteLineage(id, mode);
+        actionOk.value = mode === "shadow"
+          ? "已落影子断链草稿（子指标零改，待确认升正）"
+          : `已删边并级联作废子指标 ${(r.invalidated_sample_ids || []).join(", ") || "（无子指标）"}`;
+      });
+    }
+    async function promoteShadow(id) {
+      if (!window.confirm("确认升正？将在同一事务原子作废该影子断链的全部子指标。")) return;
+      await flash(() => api.promoteShadow(id));
+    }
+    async function silentLoadReconcile() {
+      try {
+        const data = await api.reconcile();
+        reconAllItems.value = data.items;
+        reconOrphans.value = (await api.reconcileOrphans()).items || [];
+      } catch (e) {
+        // 静默：切页自动加载失败不打断，用户仍可点「刷新全部」。
+      }
+    }
     async function loadReconcile() {
-      await flash(async () => { reconAllItems.value = (await api.reconcile()).items; });
+      await flash(async () => {
+        const data = await api.reconcile();
+        reconAllItems.value = data.items;
+        reconOrphans.value = (await api.reconcileOrphans()).items || [];
+      });
     }
     async function loadReconcileOne() {
       await flash(async () => { reconOne.value = await api.reconcileOne(reconCode.value); });
@@ -208,6 +244,7 @@ createApp({
       actionErr.value = "";
       actionOk.value = "";
       if (token.value) await refresh();
+      if (token.value && tab.value === 9) silentLoadReconcile();
     });
 
     onMounted(async () => {
@@ -219,13 +256,15 @@ createApp({
     return {
       token, user, username, password, err, actionErr, actionOk, tab, nav,
       dash, plants, outfalls, samples, exceeds, releases, seals, permits,
-      lineageEdges, labJobs, sludgeJobs, plantDetail, sampleDetail,
+      lineageEdges, lineageShadows, lineageOrphanCount, reconOrphans,
+      labJobs, sludgeJobs, plantDetail, sampleDetail,
       reconOne, reconAllItems, proofOne, reconCode, proofCode,
       plantForm, outfallForm, sampleForm, releaseForm, sealForm, permitForm,
       lineageForm, labForm, sludgeForm, releasableSamples, sealableSamples,
       login, logout, refresh, statusClass, sampleClass, fmtMetrics,
       loadPlant, loadSample, createPlant, createOutfall, createSample,
       closeExceed, createRelease, createSeal, createPermit, createLineage,
+      forceDeleteEdge, promoteShadow,
       loadReconcile, loadReconcileOne, loadProof, enqueueLab, enqueueSludge,
     };
   },

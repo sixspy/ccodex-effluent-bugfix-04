@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# effluent-bugfix-04 duel_cascade_edge — 同边双会话删除争用脚本入口。
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$DIR/duel_cascade_edge.py" "$@"

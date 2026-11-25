@@ -19,7 +19,8 @@ def list_seals(authorization: AuthHeader = None):
     require_user(authorization)
     with connect() as conn:
         rows = conn.execute(
-            """SELECT d.*, s.sample_code FROM discharge_seals d
+            """SELECT d.*, s.sample_code, s.status AS sample_status
+               FROM discharge_seals d
                JOIN sample_batches s ON s.id=d.sample_id
                ORDER BY d.id DESC"""
         ).fetchall()

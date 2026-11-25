@@ -36,7 +36,10 @@ def _next_sample_code(conn, outfall_id: int) -> str:
 def list_samples(authorization: AuthHeader = None, status: str | None = None):
     require_user(authorization)
     with connect() as conn:
-        q = """SELECT s.*, o.outfall_code, p.plant_code FROM sample_batches s
+        q = """SELECT s.*, o.outfall_code, p.plant_code,
+                      (SELECT COUNT(1) FROM lineage_shadow_edges sh
+                        WHERE sh.to_sample_id=s.id AND COALESCE(sh.promoted,0)=0) AS open_shadow_count
+               FROM sample_batches s
                JOIN outfalls o ON o.id=s.outfall_id
                JOIN plants p ON p.id=o.plant_id"""
         if status:
@@ -49,6 +52,9 @@ def list_samples(authorization: AuthHeader = None, status: str | None = None):
         for r in rows:
             d = dict(r)
             d["metrics"] = json.loads(d["metrics"] or "{}")
+            # 同源标记：未升正影子断链 / 已作废级联批，采样页不得再显假正常。
+            d["orphan"] = int(d.get("open_shadow_count") or 0) > 0
+            d["voided"] = d["status"] == "作废"
             items.append(d)
         return {"items": items}
 
@@ -82,11 +88,16 @@ def get_sample(sample_id: int, authorization: AuthHeader = None):
             "SELECT * FROM discharge_releases WHERE sample_id=? ORDER BY id DESC",
             (sample_id,),
         ).fetchall()
+        shadows = conn.execute(
+            "SELECT * FROM lineage_shadow_edges WHERE to_sample_id=? ORDER BY id DESC",
+            (sample_id,),
+        ).fetchall()
         return {
             "sample": data,
             "exceed_holds": [dict(h) for h in holds],
             "discharge_seals": [dict(s) for s in seals],
             "discharge_releases": [dict(r) for r in releases],
+            "shadow_breaks": [dict(sh) for sh in shadows],
         }
 
 

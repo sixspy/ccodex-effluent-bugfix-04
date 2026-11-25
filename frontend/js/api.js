@@ -13,7 +13,12 @@ export function createApi(getToken, onUnauthorized) {
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     if (!res.ok) {
       const detail = data && (data.detail || data.message);
-      throw new Error(typeof detail === "string" ? detail : ("请求失败 " + res.status));
+      let msg;
+      if (typeof detail === "string") msg = detail;
+      else if (detail && typeof detail === "object" && detail.message) msg = detail.message;
+      else if (detail != null) { try { msg = JSON.stringify(detail); } catch { msg = "请求失败 " + res.status; } }
+      else msg = "请求失败 " + res.status;
+      throw new Error(msg);
     }
     return data;
   }
@@ -43,6 +48,10 @@ export function createApi(getToken, onUnauthorized) {
     createPermit: (body) => request("/api/permits", { method: "POST", body: JSON.stringify(body) }),
     lineage: () => request("/api/lineage"),
     createLineage: (body) => request("/api/lineage", { method: "POST", body: JSON.stringify(body) }),
+    forceDeleteLineage: (id, mode) => request("/api/lineage/" + id + "/force-delete" + (mode ? ("?mode=" + encodeURIComponent(mode)) : ""), { method: "POST", body: JSON.stringify({ mode: mode || null }) }),
+    lineageShadows: () => request("/api/lineage/shadows"),
+    promoteShadow: (id) => request("/api/lineage/shadows/" + id + "/promote", { method: "POST", body: "{}" }),
+    reconcileOrphans: () => request("/api/reconcile/orphans"),
     reconcile: () => request("/api/reconcile"),
     reconcileOne: (code) => request("/api/reconcile/" + encodeURIComponent(code)),
     proof: (code) => request("/api/proof/sample/" + encodeURIComponent(code)),

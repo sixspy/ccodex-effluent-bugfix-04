@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# effluent-bugfix-04 争用闸入口：双会话并发删同一父边。
+# 用法：
+#   ./duel_cascade_edge --inproc
+#   ./duel_cascade_edge --base-url http://127.0.0.1:11629 --edge 1
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$DIR/scripts/duel_cascade_edge.py" "$@"

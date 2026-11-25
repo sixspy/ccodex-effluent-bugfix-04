@@ -147,6 +147,33 @@ CREATE TABLE IF NOT EXISTS metric_lineage(
   created_at TEXT NOT NULL,
   FOREIGN KEY(from_sample_id) REFERENCES sample_batches(id)
 );
+-- BUGFIX-04 级联修复：删边留下的「影子断链」账。
+-- promoted=0 即乙路径「未升正」草稿：正式子指标零改，对账不得当已清；
+-- promoted=1 即已经确认/甲路径同事务级联作废并升正。
+CREATE TABLE IF NOT EXISTS lineage_shadow_edges(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  edge_id INTEGER,
+  from_sample_id INTEGER,
+  to_sample_id INTEGER,
+  from_code TEXT,
+  to_code TEXT,
+  permit_ref TEXT,
+  edge_type TEXT,
+  detail TEXT,
+  status TEXT NOT NULL DEFAULT '影子断链',
+  state TEXT,
+  promoted INTEGER NOT NULL DEFAULT 0,
+  is_promoted INTEGER NOT NULL DEFAULT 0,
+  cleared INTEGER NOT NULL DEFAULT 0,
+  cascaded INTEGER NOT NULL DEFAULT 0,
+  resolved INTEGER NOT NULL DEFAULT 0,
+  invalidated_ids TEXT,
+  actor TEXT,
+  created_at TEXT,
+  promoted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_edge_id ON lineage_shadow_edges(edge_id);
+CREATE INDEX IF NOT EXISTS idx_shadow_promoted ON lineage_shadow_edges(promoted);
 CREATE TABLE IF NOT EXISTS effluent_locks(
   lock_key TEXT PRIMARY KEY,
   holder TEXT NOT NULL,
@@ -474,6 +501,17 @@ def dashboard_stats(conn: sqlite3.Connection) -> dict:
     pending = conn.execute(
         "SELECT COUNT(*) c FROM sample_batches WHERE status='旁路挂起'"
     ).fetchone()["c"]
+    voided = conn.execute(
+        "SELECT COUNT(*) c FROM sample_batches WHERE status='作废'"
+    ).fetchone()["c"]
+    # BUGFIX-04：总览与血缘/对账同源，未升正影子断链必须外露，不得假绿。
+    open_shadow_breaks = 0
+    try:
+        open_shadow_breaks = conn.execute(
+            "SELECT COUNT(*) c FROM lineage_shadow_edges WHERE COALESCE(promoted,0)=0"
+        ).fetchone()["c"]
+    except sqlite3.OperationalError:
+        open_shadow_breaks = 0
     stubs = {
         "lab_courier_jobs": conn.execute(
             "SELECT COUNT(*) c FROM lab_courier_jobs"
@@ -491,6 +529,9 @@ def dashboard_stats(conn: sqlite3.Connection) -> dict:
         "discharge_seals": sealed,
         "permits": permits,
         "side_pending": pending,
+        "voided_samples": voided,
+        "open_shadow_breaks": open_shadow_breaks,
+        "orphan_metrics_ok": open_shadow_breaks == 0,
         "stubs": stubs,
         "meta": PRODUCT_META,
     }
